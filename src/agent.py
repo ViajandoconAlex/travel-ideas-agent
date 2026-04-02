@@ -4,11 +4,11 @@ import sys
 
 import resend
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
+from duckduckgo_search import DDGS
+from groq import Groq
 
 from email_template import render_html
-from prompts import SYSTEM_PROMPT, build_user_prompt
+from prompts import SYSTEM_PROMPT, build_search_queries, build_user_prompt
 
 load_dotenv()
 
@@ -21,20 +21,43 @@ def get_env(key: str) -> str:
     return value
 
 
-def call_gemini(client: genai.Client) -> list[dict]:
-    user_prompt = build_user_prompt()
+def search_trends() -> str:
+    queries = build_search_queries()
+    all_results = []
 
-    print("[INFO] Llamando a Gemini con Google Search activado...")
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=f"{SYSTEM_PROMPT}\n\n{user_prompt}",
-        config=types.GenerateContentConfig(
-            tools=[types.Tool(google_search=types.GoogleSearch())],
-            temperature=0.7,
-        ),
+    print("[INFO] Buscando tendencias con DuckDuckGo...")
+    with DDGS() as ddgs:
+        for query in queries:
+            try:
+                results = list(ddgs.text(query, max_results=5))
+                for r in results:
+                    all_results.append(f"- {r.get('title', '')}: {r.get('body', '')}")
+            except Exception as e:
+                print(f"[WARN] Error en búsqueda '{query}': {e}", file=sys.stderr)
+
+    if not all_results:
+        print("[ERROR] No se obtuvieron resultados de búsqueda.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"[INFO] {len(all_results)} resultados obtenidos.")
+    return "\n".join(all_results[:15])  # Máximo 15 resultados para no exceder tokens
+
+
+def call_groq(client: Groq, search_results: str) -> list[dict]:
+    user_prompt = build_user_prompt(search_results)
+
+    print("[INFO] Generando ideas con Groq...")
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.7,
+        max_tokens=1500,
     )
 
-    raw_text = response.text.strip()
+    raw_text = response.choices[0].message.content.strip()
 
     # Extraer JSON si viene envuelto en markdown code block
     if "```json" in raw_text:
@@ -51,7 +74,7 @@ def call_gemini(client: genai.Client) -> list[dict]:
         start = raw_text.find("{")
         end = raw_text.rfind("}") + 1
         if start == -1:
-            print("[ERROR] Gemini no retornó un JSON válido.", file=sys.stderr)
+            print("[ERROR] Groq no retornó un JSON válido.", file=sys.stderr)
             print(f"[DEBUG] Respuesta: {raw_text}", file=sys.stderr)
             sys.exit(1)
         raw_text = raw_text[start:end]
@@ -99,14 +122,15 @@ def send_email(ideas: list[dict], email_to: str) -> None:
 
 
 def main() -> None:
-    gemini_key = get_env("GEMINI_API_KEY")
+    groq_key = get_env("GROQ_API_KEY")
     resend_key = get_env("RESEND_API_KEY")
     email_to = get_env("EMAIL_TO")
 
     resend.api_key = resend_key
-    gemini_client = genai.Client(api_key=gemini_key)
+    groq_client = Groq(api_key=groq_key)
 
-    ideas = call_gemini(gemini_client)
+    search_results = search_trends()
+    ideas = call_groq(groq_client, search_results)
     send_email(ideas, email_to)
 
     print("[INFO] ✓ Agente completado exitosamente.")

@@ -1,21 +1,20 @@
 from datetime import datetime
 
+
 SYSTEM_PROMPT = """
 Eres un estratega de contenido especializado en travel tips para creadores en Instagram, TikTok y YouTube.
 
-Tu tarea cada mañana:
-1. Usa web_search para investigar qué formatos y temas de travel tips están teniendo más engagement en las últimas 48-72 horas en Instagram Reels, TikTok y YouTube Shorts.
-2. Identifica 3 tendencias concretas y accionables.
-3. Por cada tendencia, genera una idea de contenido específica para un creador chileno de viajes llamado Alex.
+Se te entregarán resultados de búsqueda recientes sobre tendencias de contenido de viajes.
+Basándote en esa información, genera 3 ideas de contenido específicas y accionables para un creador chileno de viajes llamado Alex.
 
 Responde SOLO con un JSON válido con este formato exacto, sin texto adicional antes ni después:
 {
   "ideas": [
     {
       "plataforma": "Instagram Reel",
-      "tendencia_base": "descripción de la tendencia concreta que encontraste",
+      "tendencia_base": "descripción de la tendencia concreta encontrada en los resultados",
       "gancho": "primera frase o texto de apertura del video (máx 15 palabras)",
-      "desarrollo": "de qué trata el contenido: qué mostrar, qué decir, en qué orden (2-3 oraciones)",
+      "desarrollo": "qué mostrar, qué decir, en qué orden (2-3 oraciones concretas)",
       "cta": "call to action específico al final del video"
     },
     {
@@ -35,23 +34,31 @@ Responde SOLO con un JSON válido con este formato exacto, sin texto adicional a
   ]
 }
 
-Reglas estrictas:
-- Una idea por plataforma, en el orden: Instagram Reel, TikTok, YouTube Short.
+Reglas:
+- Una idea por plataforma en el orden: Instagram Reel, TikTok, YouTube Short.
 - El gancho debe generar curiosidad en los primeros 3 segundos. Sin clichés.
 - El desarrollo debe ser ejecutable: acciones concretas, no vagas.
-- Sin ideas genéricas como "tips de viaje". Deben estar basadas en tendencias reales que encontraste.
-- Si una búsqueda no da resultados útiles, busca de nuevo con diferentes términos.
+- Basar cada idea en algo específico de los resultados de búsqueda proporcionados.
 """.strip()
 
 
-def build_user_prompt() -> str:
+def build_search_queries() -> list[str]:
+    return [
+        "travel tips trending TikTok Instagram Reels 2025",
+        "travel content ideas viral YouTube Shorts this week",
+        "tendencias contenido viajes TikTok Instagram 2025",
+    ]
+
+
+def build_user_prompt(search_results: str) -> str:
     fecha = datetime.now().strftime("%A %d de %B de %Y")
     return f"""
 Hoy es {fecha}.
 
-Investiga qué está en tendencia ahora mismo en contenido de travel tips en Instagram Reels, TikTok y YouTube Shorts.
-Busca en inglés Y en español. Prioriza tendencias de las últimas 48-72 horas.
+Aquí están los resultados de búsqueda recientes sobre tendencias de contenido de viajes:
 
-Genera las 3 ideas de contenido para hoy basadas en lo que encontraste.
+{search_results}
+
+Basándote en estos resultados, genera las 3 ideas de contenido para hoy.
 Responde solo con el JSON.
 """.strip()
